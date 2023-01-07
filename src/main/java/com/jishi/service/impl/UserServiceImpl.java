@@ -8,11 +8,14 @@ import com.jishi.entity.User;
 import com.jishi.service.UserService;
 import com.jishi.mapper.UserMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
 * @author 23049
@@ -26,15 +29,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     implements UserService{
 
 
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
     //这里利用工具生成四位数验证码，本来应该利用腾讯云发送给
     //用户手机，但是无法备案，因此先在控制台查看验证码进行测试
+    //项目优化，使用redis进行存储验证码
     @Override
     public R<String> smsCode(Map<String,String> map,HttpServletRequest request) {
 
 
         //利用工具类直接生成四位数验证码
         Integer smsCode = ValidateCodeUtils.generateValidateCode(4);
-        request.getSession().setAttribute("smsCode",smsCode);
+        //把验证码存入redis中存储（手机号做key,code做value）,有效期设置为5分钟
+        redisTemplate.opsForValue().set(map.get("phone"),String.valueOf(smsCode),5, TimeUnit.MINUTES);
 
         //这里应该是调用腾讯云SMS Api传入map.get("phone")向指定手机号发送验证码
         System.out.println(smsCode);
@@ -48,8 +56,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
 
 
-
-        Integer smsCode = Integer.valueOf((String)map.get("code"));
+        String smsCode =(String)map.get("code");
 
         String phoneNumber = (String) map.get("phone");
 
@@ -59,7 +66,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             return R.error("请将手机号和验证码输入完整！");
 
 
-        if (!smsCode.equals(request.getSession().getAttribute("smsCode")))
+        if (!smsCode.equals(redisTemplate.opsForValue().get(phoneNumber)))
                 return  R.error("验证码输入错误，请重新输入！");
 
 
@@ -69,6 +76,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
        {
            //调用注册方法
            this.register(phoneNumber,request);
+           redisTemplate.delete(phoneNumber);
            return  R.success(null);
        }
        else
@@ -77,7 +85,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
            Long userId = this.getOne(new LambdaQueryWrapper<User>()
                    .eq(User::getPhone, phoneNumber)).getId();
            request.getSession().setAttribute("user",userId);
-
+           redisTemplate.delete(phoneNumber);
            return R.success(null);
        }
 

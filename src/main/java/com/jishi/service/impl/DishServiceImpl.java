@@ -1,5 +1,6 @@
 package com.jishi.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -13,10 +14,13 @@ import com.jishi.service.DishService;
 import com.jishi.mapper.DishMapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.jackson.JsonComponent;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -32,6 +36,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
     private DishFlavorService dishFlavorService;
     @Autowired
     private  DishMapper dishMapper;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
 
 
@@ -41,7 +47,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
     @Transactional
     @Override
     //开启事务，还需要在启动类加上EnableTransactionManagement
+    //修改菜品，需要同步删除redis对应缓存
     public R updateDishWithFlavor(DishDto dishDto) {
+
+        //缓存查询种类菜品的redis Id,这里应该和存入时的redisKey保持一致
+        String  redisId = "dish_select_by"+"_categoryid_"+dishDto.getCategoryId();
 
         //框架会自动识别数据进行插入
         this.saveOrUpdate(dishDto);
@@ -63,6 +73,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
         }).collect(Collectors.toList());
 
         dishFlavorService.saveBatch(dishFlavors);
+
+        stringRedisTemplate.delete(redisId);
 
         return R.success(null);
     }
@@ -110,16 +122,30 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
 
     //提供给套餐管理页面新增套餐里的查询分类管理（川菜等等）对应菜品功能
     //提供给用户点餐页面展示不同菜品分类的菜品
+    //使用redis进行优化
     @Override
     public R<List<DishDto>> selectDishByCategory(Long categoryId,String name) {
 
+        //构造一个存入redis的实际含义id
+        String  redisId = "dish_select_by"+"_categoryid_"+categoryId;
+
+        //获取redis JsON字符串并进行强转
+        List<DishDto> dishDtoList= (List<DishDto>)JSON.parse(stringRedisTemplate.opsForValue()
+                .get(redisId));
+
+        //如果redis中有缓存数据，直接返回
+        if (dishDtoList!=null)
+            return R.success(dishDtoList);
+
+
+        //如果不存在缓存数据，查询数据库，并将数据存入redis
         List<Dish> dishLish = this.list(new LambdaQueryWrapper<Dish>()
                 .eq(categoryId != null, Dish::getCategoryId, categoryId)
                 .like(name!=null,Dish::getName,name)
                 .orderByAsc(Dish::getSort)
         );
 
-        List<DishDto> dishDtoList = dishLish.stream().map(dish -> {
+        dishDtoList = dishLish.stream().map(dish -> {
 
             DishDto dishDto = new DishDto();
             BeanUtils.copyProperties(dish,dishDto);
@@ -132,6 +158,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
             return dishDto;
         }).collect(Collectors.toList());
 
+        //将查询到的数据存入redis缓存,设置一小时超时时间
+        stringRedisTemplate.opsForValue().set(redisId,JSON.toJSONString(dishDtoList),1, TimeUnit.HOURS);
         return R.success(dishDtoList);
     }
 
@@ -156,8 +184,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
     @Transactional
     @Override
     //新增菜品功能
+    //新增菜品后，查询种类对应的菜品功能redis缓存应该被清除
     public R addDishWithFlavor(DishDto dishDto) {
 
+        //缓存查询种类菜品的redis Id,这里应该和存入时的redisKey保持一致
+        String  redisId = "dish_select_by"+"_categoryid_"+dishDto.getCategoryId();
 
         this.save(dishDto);
         Long dishId = dishDto.getId();
@@ -173,6 +204,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
         }).collect(Collectors.toList());
 
         dishFlavorService.saveBatch(flavors);
+
+        //删除redis对应缓存
+        stringRedisTemplate.delete(redisId);
         return R.success(null);
 
     }
