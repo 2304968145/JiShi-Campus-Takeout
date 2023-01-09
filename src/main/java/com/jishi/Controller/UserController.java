@@ -9,12 +9,12 @@ import org.springframework.web.bind.annotation.*;
 import javax.servlet.http.HttpServletRequest;
 import java.util.Map;
 
-    @Slf4j
-    @RestController
-    @RequestMapping("/user")
-    public class UserController {
+@Slf4j
+@RestController
+@RequestMapping("/user")
+public class UserController {
 
-        @Autowired
+    @Autowired
     UserService userService;
 
     @PostMapping("/sendMsg")

@@ -17,6 +17,8 @@ import com.jishi.service.SetmealService;
 import com.jishi.mapper.SetmealMapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +43,7 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal>
     @Transactional
     @Override
     //新增套餐功能
+    @CacheEvict(value = "setmea_detail_list",allEntries = true)
     public R addSetmealWithSetmealDish(SetmealDto setmealDto) {
 
 
@@ -67,7 +70,7 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal>
     @Override
     public R<Page<SetmealDto>> setmealPageSelect(Integer page, Integer pageSize, String name) {
 
-            //Dish分页查询
+            //套餐分页查询
             Page<Setmeal> pageInfo = new Page<>(page,pageSize);
             LambdaQueryWrapper<Setmeal> queryWrapper = new LambdaQueryWrapper<>();
             queryWrapper.like(name!=null,Setmeal::getName,name)
@@ -103,6 +106,8 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal>
     @Override
     @Transactional
     //套餐管理界面中删除对应套餐功能
+    //删除套餐后，直接清空所有套餐缓存（清除单个不知道怎么判断，传过来的是数组)
+    @CacheEvict(value = "setmea_detail_list",allEntries = true)
     public R deleteSetmeal(List<Long> ids) {
 
 
@@ -131,6 +136,7 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal>
 
     //用户页面查询不同套餐内容的具体信息（如商务套餐）
     @Override
+    @Cacheable(value = "setmea_detail_list",key = "'categoryId_'+#categoryId")
     public R<List<Setmeal>> selectSetmelByCategoryId(Long categoryId, Integer status) {
 
 
