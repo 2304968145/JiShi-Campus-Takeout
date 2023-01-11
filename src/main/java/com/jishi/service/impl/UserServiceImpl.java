@@ -3,6 +3,7 @@ package com.jishi.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.jishi.common.R;
+import com.jishi.common.ThreadUtil;
 import com.jishi.common.utils.ValidateCodeUtils;
 import com.jishi.entity.User;
 import com.jishi.service.UserService;
@@ -99,7 +100,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setPhone(phoneNumber);
         this.save(user);
         request.getSession().setAttribute("user",user.getId());
+    }
 
+
+    //用户登出方法
+    @Override
+    public R loginout(HttpServletRequest request) {
+
+        request.getSession().removeAttribute("user");
+        return R.success(null);
     }
 }
 

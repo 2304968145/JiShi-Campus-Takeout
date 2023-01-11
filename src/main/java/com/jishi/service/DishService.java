@@ -26,4 +26,11 @@ public interface DishService extends IService<Dish> {
     public  R<Page<DishDto>> dishSelect(Integer page, Integer pageSize, String name);
 
     public  R<List<DishDto>> selectDishByCategory(Long categoryId,String name);
+
+    public  R deleteDish(List<Long> ids);
+
+    public  R  stopSale(List<Long> ids);
+
+    public R startSale(List<Long> ids);
+
 }

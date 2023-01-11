@@ -26,4 +26,12 @@ public interface SetmealService extends IService<Setmeal> {
 
     public  R<List<Setmeal>>  selectSetmelByCategoryId(Long categoryId,Integer status);
 
+    public  R  stopSale(List<Long> ids);
+
+    public R startSale(List<Long> ids);
+
+    public  R update(SetmealDto setmealDto);
+
+    public R<SetmealDto> updateShow(Long id);
+
 }

@@ -86,6 +86,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category>
     }
 
 
+    //彩品分类查询
     public R<List<Category>> categorySelect(Integer type){
         LambdaQueryWrapper<Category> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(type != null,Category::getType,type)

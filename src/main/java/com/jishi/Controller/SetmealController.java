@@ -43,4 +43,31 @@ public class SetmealController {
 
         return  setmealService.selectSetmelByCategoryId(categoryId,status);
     }
+
+    @PostMapping("/status/0")
+    public  R  stopSale(@RequestParam List<Long> ids){
+
+      return   setmealService.stopSale(ids);
+    }
+
+    @PostMapping("/status/1")
+    public R startSale(@RequestParam List<Long> ids){
+
+        return  setmealService.startSale(ids);
+    }
+
+
+    @GetMapping("/{id}")
+    public  R<SetmealDto>  updateShow(@PathVariable Long id){
+
+        return  setmealService.updateShow(id);
+    }
+
+
+    @PutMapping
+    public  R update(@RequestBody SetmealDto setmealDto){
+
+        return  setmealService.update(setmealDto);
+    }
+
 }

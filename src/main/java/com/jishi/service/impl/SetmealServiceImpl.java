@@ -12,6 +12,7 @@ import com.jishi.entity.DishFlavor;
 import com.jishi.entity.Setmeal;
 import com.jishi.entity.SetmealDish;
 import com.jishi.service.CategoryService;
+import com.jishi.service.DishService;
 import com.jishi.service.SetmealDishService;
 import com.jishi.service.SetmealService;
 import com.jishi.mapper.SetmealMapper;
@@ -39,6 +40,9 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal>
     private SetmealDishService setmealDishService;
     @Autowired
     private CategoryService categoryService;
+
+    @Autowired
+    private DishService dishService;
 
     @Transactional
     @Override
@@ -146,6 +150,121 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal>
 
         return R.success(setmealList);
     }
+
+
+    //（批量）停售套餐
+    @CacheEvict(value = "setmea_detail_list",allEntries = true)
+    @Override
+    public R stopSale(List<Long> ids) {
+
+        if (ids.isEmpty())
+        {
+            return R.error("请先选择要停售的套餐！");
+        }
+
+
+        List<Setmeal> setmealList = ids.stream().map(id -> {
+            Setmeal setmeal = new Setmeal();
+            setmeal.setId(id);
+            setmeal.setStatus(0);
+            return setmeal;
+        }).collect(Collectors.toList());
+
+        this.updateBatchById(setmealList);
+
+        return R.success(null);
+    }
+
+    //（批量）起售套餐
+    @CacheEvict(value = "setmea_detail_list",allEntries = true)
+    @Override
+    public R startSale(List<Long> ids) {
+
+        if (ids.isEmpty())
+        {
+            return R.error("请先选择要起售的套餐！");
+        }
+        //起售之前应该先判断套餐包含的菜品是否存在且处于起售状态
+        //先查询ids中包含的菜品id集合
+        List<Long> dishIds = setmealDishService.listObjs(new LambdaQueryWrapper<SetmealDish>()
+                        .select(SetmealDish::getDishId)
+                        .in(SetmealDish::getSetmealId, ids))
+                .stream().distinct().map(id -> {
+                    //进行强转
+                    return Long.valueOf(id.toString());
+                }).collect(Collectors.toList());
+        //查询dish表中dish数量和集合大小比对，如果不一致说明有菜品状态不正常
+        int dishCount = dishService.count(new LambdaQueryWrapper<Dish>()
+                .eq(Dish::getStatus, 1)
+                .in(Dish::getId, dishIds));
+        if (dishCount!=dishIds.size())
+        {
+            return R.error("启用的套餐中有菜品状态不正常，请检查！");
+        }
+        //正式启用套餐
+        List<Setmeal> setmealList = ids.stream().map(id -> {
+            Setmeal setmeal = new Setmeal();
+            setmeal.setId(id);
+            setmeal.setStatus(1);
+            return setmeal;
+        }).collect(Collectors.toList());
+
+        this.updateBatchById(setmealList);
+
+        //删除缓存
+
+        return R.success(null);
+    }
+
+
+    //更新套餐信息
+    @Override
+    @Transactional
+    @CacheEvict(value = "setmea_detail_list",allEntries = true)
+    public R update(SetmealDto setmealDto) {
+
+
+            //框架会自动识别数据进行插入
+            this.saveOrUpdate(setmealDto);
+            Long setmealId = setmealDto.getId();
+
+            //这里先把所有套餐详情删除再进行添加（这样做会丢失修改时间，不这样做会很麻烦，需要
+            //先查询数据库中所有对应套餐的详情，全部删除，
+
+
+            //删除所有对应套餐详情
+            setmealDishService.remove(new LambdaQueryWrapper<SetmealDish>()
+                    .eq(SetmealDish::getSetmealId,setmealId));
+
+
+            // 使用stream流方法给每个套餐（菜品）详情赋上共同的套餐id
+            List<SetmealDish> setmealDishList = setmealDto.getSetmealDishes().stream().map(setmealDish -> {
+                setmealDish.setSetmealId(setmealId);
+                return setmealDish;
+            }).collect(Collectors.toList());
+
+            setmealDishService.saveBatch(setmealDishList);
+
+            return R.success(null);
+
+    }
+
+    @Override
+    public R<SetmealDto> updateShow(Long id) {
+
+        Setmeal setmeal = this.getById(id);
+
+        List<SetmealDish> setmealDishList = setmealDishService.list(new LambdaQueryWrapper<SetmealDish>()
+                .eq(SetmealDish::getSetmealId, id));
+
+        SetmealDto setmealDto = new SetmealDto();
+        BeanUtils.copyProperties(setmeal,setmealDto);
+        setmealDto.setSetmealDishes(setmealDishList);
+
+        return R.success(setmealDto);
+
+    }
+
 
 }
 

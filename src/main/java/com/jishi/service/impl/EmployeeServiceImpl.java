@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
 import com.jishi.common.R;
+import com.jishi.common.ThreadUtil;
 import com.jishi.entity.Employee;
 import com.jishi.mapper.EmployeeMapper;
 import com.jishi.service.EmployeeService;
@@ -59,6 +60,8 @@ public class EmployeeServiceImpl extends ServiceImpl<EmployeeMapper, Employee>
 
         //存储到Sessison中
         request.getSession().setAttribute("employee",one.getId());
+        //存储员工id到线程工具中，方便mp调用
+        ThreadUtil.setCurrentId(one.getId());
         return  R.success(one);
 
     }
@@ -69,6 +72,7 @@ public class EmployeeServiceImpl extends ServiceImpl<EmployeeMapper, Employee>
 
         //账号退出清除服务器session
         request.getSession().removeAttribute("employee");
+        ThreadUtil.setCurrentId(null);
         return R.success("退出成功！");
     }
 

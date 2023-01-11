@@ -4,21 +4,25 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.jishi.common.Exception.BussinessException;
 import com.jishi.common.R;
 import com.jishi.dto.DishDto;
 import com.jishi.entity.Dish;
 import com.jishi.entity.DishFlavor;
-import com.jishi.service.CategoryService;
-import com.jishi.service.DishFlavorService;
-import com.jishi.service.DishService;
+import com.jishi.entity.Setmeal;
+import com.jishi.entity.SetmealDish;
+import com.jishi.service.*;
 import com.jishi.mapper.DishMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.List;
+
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +31,7 @@ import java.util.stream.Collectors;
 * @createDate 2023-01-03 21:59:37
 */
 @Service
+@Slf4j
 public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
     implements DishService{
 
@@ -35,9 +40,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
     @Autowired
     private  DishMapper dishMapper;
     @Autowired
+    private SetmealService setmealService;
+    @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
-
+    @Autowired
+    private SetmealDishService setmealDishService;
 
     @Autowired
     private CategoryService categoryService;
@@ -139,6 +147,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
         //如果不存在缓存数据，查询数据库，并将数据存入redis
         List<Dish> dishLish = this.list(new LambdaQueryWrapper<Dish>()
                 .eq(categoryId != null, Dish::getCategoryId, categoryId)
+                .eq(Dish::getStatus,1)
                 .like(name!=null,Dish::getName,name)
                 .orderByAsc(Dish::getSort)
         );
@@ -159,6 +168,142 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
         //将查询到的数据存入redis缓存,设置一小时超时时间
         stringRedisTemplate.opsForValue().set(redisId,JSON.toJSONString(dishDtoList),1, TimeUnit.HOURS);
         return R.success(dishDtoList);
+    }
+
+    @Override
+    public R deleteDish(List<Long> ids) {
+
+
+        if (ids.isEmpty())
+            return R.error("请先选中要删除的菜品！");
+
+        //先进行判断，如果套餐菜品处于出售状态，则不允许删除
+        if (this.count(new LambdaQueryWrapper<Dish>()
+                .in(Dish::getId,ids)
+                .eq(Dish::getStatus,1))>0)
+        {
+            throw new BussinessException("删除选项中中存在未停售的菜品，请先停售菜品！");
+        }
+        //先进行判断如果有套餐包含该菜品处，需要先删除套餐
+        if (setmealDishService.count(new LambdaQueryWrapper<SetmealDish>()
+                .in(SetmealDish::getDishId,ids)
+        )>0)
+        {
+            throw new BussinessException("删除选项中存在包含该菜品的套餐，请先删除或修改套餐！");
+        }
+
+        //查询dishId对应的CategoryId
+        //清空redis中相关缓存
+         List<Object> list = this.listObjs(new LambdaQueryWrapper<Dish>()
+                .select(Dish::getCategoryId)
+                .in(Dish::getId, ids)
+        );
+
+        //这里再进行删除正式进行删除操作，否则会导致上一步查询不到结果
+        //删除Dish表中数据
+        this.removeByIds(ids);
+
+        //得到去重后的Category Set集合
+        Set<String> idsSet = list.stream().map(id -> {
+                    //将Object类型转换为String
+                    //拼接缓存前缀
+             System.out.println("dish_select_by"+"_categoryid_"+id.toString());
+                    return "dish_select_by"+"_categoryid_"+id.toString();
+                }
+        ).collect(Collectors.toSet());
+
+        //清空redis对应菜品种类缓存
+        stringRedisTemplate.delete(idsSet);
+
+        return R.success(null);
+    }
+
+    //批量停售菜品
+    @Override
+    public R stopSale(List<Long> ids) {
+
+        if (ids.isEmpty())
+        {
+            return R.error("请先选择要停售的菜品！");
+        }
+        //先查询是否存在含有该菜品的套餐正在售卖
+        List<Object> objects = setmealDishService.listObjs(new LambdaQueryWrapper<SetmealDish>()
+                .select(SetmealDish::getSetmealId)
+                .in(SetmealDish::getDishId, ids));
+
+        if (objects.size()!=0)
+        {
+            List<Long> setmealIds = objects.stream().map(o -> {
+
+                Long id =  Long.valueOf(o.toString());
+                return id;
+            }).collect(Collectors.toList());
+
+            //查询删除菜品是否有包含该菜品的套餐正在售卖
+            int count = setmealService.count(new LambdaQueryWrapper<Setmeal>()
+                    .eq(Setmeal::getStatus, 1)
+                    .in(setmealIds.size()>1,Setmeal::getId, setmealIds)
+                    .eq(ids.size()==1,Setmeal::getId,setmealIds));
+
+            if (count>0)
+                return R.error("含有删除菜品的套餐正在售卖！禁止删除！");
+
+        }
+        //正式开始删除
+        //修改菜品状态
+        List<Dish> dishList = ids.stream().map(id -> {
+            Dish dish = new Dish();
+            dish.setId(id);
+            dish.setStatus(0);
+            return dish;
+        }).collect(Collectors.toList());
+
+        this.updateBatchById(dishList);
+
+
+        //查询dishId对应的菜系categoryID，将其缓存清空
+        this.listObjs(new LambdaQueryWrapper<Dish>()
+                        .select(Dish::getCategoryId)
+                        .in(Dish::getId,ids))
+                .stream()
+                .distinct().forEach(categoryId->{
+                    //清空缓存
+                    stringRedisTemplate.delete("dish_select_by" + "_categoryid_" + categoryId);
+                });
+
+        return R.success(null);
+    }
+
+    //（批量起售菜品）
+    @Override
+    public R startSale(List<Long> ids) {
+
+        if (ids.isEmpty())
+        {
+            return R.error("请先选择要起售的菜品！");
+        }
+
+
+        List<Dish> dishList = ids.stream().map(id -> {
+            Dish dish = new Dish();
+            dish.setId(id);
+            dish.setStatus(1);
+            return dish;
+        }).collect(Collectors.toList());
+
+        this.updateBatchById(dishList);
+        //查询dishId对应的categoryID，将其缓存清空
+        this.listObjs(new LambdaQueryWrapper<Dish>()
+                .select(Dish::getCategoryId)
+                .in(Dish::getId,ids))
+                .stream()
+                .distinct().forEach(categoryId->{
+                    //清空缓存
+                 stringRedisTemplate.delete("dish_select_by" + "_categoryid_" + categoryId);
+                });
+
+        return R.success(null);
+
     }
 
     //修改菜品数据回显功能
@@ -192,12 +337,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish>
         Long dishId = dishDto.getId();
 
         List<DishFlavor> flavors = dishDto.getFlavors();
-        Long dishID = dishDto.getId();
+
 
 
         //使用stream流方法给每个flover赋上对应的dish_id
         flavors.stream().map(dishFlavor -> {
-            dishFlavor.setDishId(dishID);
+            dishFlavor.setDishId(dishId);
             return dishFlavor;
         }).collect(Collectors.toList());
 

@@ -29,4 +29,10 @@ public class UserController {
 
         return  userService.login(map,request);
     }
+
+    @PostMapping("/loginout")
+    public R loginout(HttpServletRequest request){
+
+        return  userService.loginout(request);
+    }
 }

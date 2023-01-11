@@ -3,6 +3,7 @@ package com.jishi.Controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jishi.common.R;
 import com.jishi.dto.DishDto;
+import com.jishi.dto.SetmealDto;
 import com.jishi.entity.Dish;
 import com.jishi.service.DishService;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,12 @@ public class DishController {
 
         return  dishService.addDishWithFlavor(dishDto);
 
+    }
+
+    @DeleteMapping
+    public R deleteDish(@RequestParam List<Long> ids){
+
+        return dishService.deleteDish(ids);
     }
 
     @GetMapping("/page")
@@ -52,4 +59,15 @@ public class DishController {
 
         return  dishService.selectDishByCategory(categoryId,name);
     }
+
+    @PostMapping("/status/0")
+    public  R  stopSale(@RequestParam List<Long> ids){
+        return dishService.stopSale(ids);
+    }
+
+    @PostMapping("/status/1")
+    public R startSale(@RequestParam List<Long> ids){
+        return  dishService.startSale(ids);
+    }
+
 }

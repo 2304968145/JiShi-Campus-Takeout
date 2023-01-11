@@ -20,4 +20,6 @@ public interface UserService extends IService<User> {
 
         public  void  register(String phoneNumber,HttpServletRequest request);
 
+        public  R  loginout(HttpServletRequest request);
+
 }

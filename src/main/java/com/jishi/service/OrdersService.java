@@ -1,7 +1,11 @@
 package com.jishi.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jishi.common.R;
 import com.jishi.entity.Orders;
 import com.baomidou.mybatisplus.extension.service.IService;
+
+import java.time.LocalDateTime;
 
 /**
 * @author 23049
@@ -10,4 +14,10 @@ import com.baomidou.mybatisplus.extension.service.IService;
 */
 public interface OrdersService extends IService<Orders> {
 
+
+    public R<Page<Orders>> pageSelcet(Integer page, Integer pageSize,Integer number, LocalDateTime begin, LocalDateTime end);
+
+    public R submit(Orders orders);
+
+    public  R<Page<Orders>>  lastOneOrder(Integer page,Integer pageSize);
 }

@@ -23,8 +23,6 @@ public class ShoppingCartServiceImpl extends ServiceImpl<ShoppingCartMapper, Sho
     implements ShoppingCartService{
 
 
-
-
     //添加购物车方法，每次添加商品到购物车执行此方法
     @Override
     public R<ShoppingCart> add(ShoppingCart shoppingItem, HttpServletRequest request) {

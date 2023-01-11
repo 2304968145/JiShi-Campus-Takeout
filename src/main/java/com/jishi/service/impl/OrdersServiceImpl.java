@@ -2,14 +2,19 @@ package com.jishi.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.jishi.common.Exception.BussinessException;
+import com.jishi.common.R;
 import com.jishi.common.ThreadUtil;
 import com.jishi.entity.*;
 import com.jishi.service.*;
 import com.jishi.mapper.OrdersMapper;
+import com.sun.org.apache.xpath.internal.operations.Or;
 import com.sun.prism.impl.BaseContext;
+import jdk.nashorn.internal.objects.NativeUint16Array;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,8 +49,9 @@ public class OrdersServiceImpl extends ServiceImpl<OrdersMapper, Orders>
      * 用户下单
      * @param orders
      */
+    //提交订单
     @Transactional
-    public void submit(Orders orders) {
+    public R submit(Orders orders) {
         //获得当前用户id
         Long userId = ThreadUtil.getCurrentId();
 
@@ -114,9 +120,34 @@ public class OrdersServiceImpl extends ServiceImpl<OrdersMapper, Orders>
 
         //清空购物车数据
         shoppingCartService.remove(wrapper);
+
+        return  R.success(null);
+    }
+
+    //查询用户的最新一条订单
+    @Override
+    public R<Page<Orders>> lastOneOrder(Integer page, Integer pageSize) {
+
+        Page<Orders> ordersPage = new Page<>(page,pageSize);
+        this.page(ordersPage,new LambdaQueryWrapper<Orders>()
+                .eq(Orders::getUserId,ThreadUtil.getCurrentId())
+                .orderByDesc(Orders::getOrderTime));
+
+        return R.success(ordersPage);
     }
 
 
+    //订单页面分页查询
+    @Override
+    public R<Page<Orders>> pageSelcet(Integer page, Integer pageSize,Integer number,LocalDateTime begin, LocalDateTime end) {
+        Page<Orders> page1 = new Page<>(page,pageSize);
+        Page<Orders> ordersPage = this.page(page1, new LambdaQueryWrapper<Orders>()
+                .like(number != null, Orders::getNumber, number)
+                .ge(begin != null, Orders::getOrderTime, begin)
+                .le(end != null, Orders::getOrderTime, end));
+
+        return  R.success(ordersPage);
+    }
 }
 
 
